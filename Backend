@@ -1,0 +1,521 @@
+package com.placement.management;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class PlacementManagementApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(PlacementManagementApplication.class, args);
+    }
+}
+package com.placement.management.model;
+
+public enum PlacementStatus {
+    PLACED,
+    NOT_PLACED
+}
+package com.placement.management.model;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.persistence.*;
+import jakarta.validation.constraints.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "students")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Student {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @NotBlank(message = "Name cannot be empty")
+    @Size(max = 100, message = "Name cannot exceed 100 characters")
+    @Column(nullable = false, length = 100)
+    private String name;
+
+    @NotBlank(message = "Register number cannot be empty")
+    @Size(max = 30, message = "Register number cannot exceed 30 characters")
+    @Column(name = "register_number", nullable = false, unique = true, length = 30)
+    private String registerNumber;
+
+    @NotBlank(message = "Department cannot be empty")
+    @Size(max = 60, message = "Department cannot exceed 60 characters")
+    @Column(nullable = false, length = 60)
+    private String department;
+
+    @NotBlank(message = "Email cannot be empty")
+    @Email(message = "Email must have a valid format")
+    @Column(nullable = false, unique = true, length = 100)
+    private String email;
+
+    @NotBlank(message = "Phone number cannot be empty")
+    @Pattern(regexp = "^[0-9+\\-\\s]{7,15}$", message = "Phone number must be a valid format")
+    @Column(length = 15)
+    private String phone;
+
+    @NotNull(message = "CGPA is required")
+    @DecimalMin(value = "0.0", inclusive = true, message = "CGPA must be between 0 and 10")
+    @DecimalMax(value = "10.0", inclusive = true, message = "CGPA must be between 0 and 10")
+    @Column(nullable = false)
+    private Double cgpa;
+
+    @NotNull(message = "Placement status is required")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "placement_status", nullable = false, length = 20)
+    private PlacementStatus placementStatus;
+
+    @Size(max = 100, message = "Company name cannot exceed 100 characters")
+    @Column(name = "company_name", length = 100)
+    private String companyName;
+
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+}
+package com.placement.management.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class DashboardStatsDTO {
+    private long totalStudents;
+    private long placedStudents;
+    private long notPlacedStudents;
+    private double averageCgpa;
+    private long departmentCount;
+}
+package com.placement.management.dto;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ErrorResponseDTO {
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime timestamp;
+    private int status;
+    private String error;
+    private String message;
+    private String path;
+    private Map<String, String> fieldErrors;
+}
+package com.placement.management.exception;
+
+public class ResourceNotFoundException extends RuntimeException {
+    public ResourceNotFoundException(String message) {
+        super(message);
+    }
+}
+package com.placement.management.exception;
+
+public class DuplicateResourceException extends RuntimeException {
+    public DuplicateResourceException(String message) {
+        super(message);
+    }
+}
+package com.placement.management.exception;
+
+import com.placement.management.dto.ErrorResponseDTO;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponseDTO> handleResourceNotFound(
+            ResourceNotFoundException ex, HttpServletRequest request) {
+        ErrorResponseDTO body = buildBody(HttpStatus.NOT_FOUND, ex.getMessage(), request, null);
+        return new ResponseEntity<>(body, HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(DuplicateResourceException.class)
+    public ResponseEntity<ErrorResponseDTO> handleDuplicateResource(
+            DuplicateResourceException ex, HttpServletRequest request) {
+        ErrorResponseDTO body = buildBody(HttpStatus.CONFLICT, ex.getMessage(), request, null);
+        return new ResponseEntity<>(body, HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponseDTO> handleValidationErrors(
+            MethodArgumentNotValidException ex, HttpServletRequest request) {
+        Map<String, String> fieldErrors = new HashMap<>();
+        ex.getBindingResult().getFieldErrors().forEach(fieldError ->
+                fieldErrors.put(fieldError.getField(), fieldError.getDefaultMessage()));
+        ErrorResponseDTO body = buildBody(
+                HttpStatus.BAD_REQUEST, "Validation failed for one or more fields", request, fieldErrors);
+        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponseDTO> handleUnreadableBody(
+            HttpMessageNotReadableException ex, HttpServletRequest request) {
+        ErrorResponseDTO body = buildBody(
+                HttpStatus.BAD_REQUEST, "Request body is missing or malformed JSON", request, null);
+        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponseDTO> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        String message = String.format("Invalid value '%s' for parameter '%s'", ex.getValue(), ex.getName());
+        ErrorResponseDTO body = buildBody(HttpStatus.BAD_REQUEST, message, request, null);
+        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponseDTO> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex, HttpServletRequest request) {
+        ErrorResponseDTO body = buildBody(
+                HttpStatus.CONFLICT,
+                "The record violates a database constraint (duplicate register number or email)",
+                request, null);
+        return new ResponseEntity<>(body, HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponseDTO> handleGenericException(
+            Exception ex, HttpServletRequest request) {
+        ErrorResponseDTO body = buildBody(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "An unexpected error occurred: " + ex.getMessage(),
+                request, null);
+        return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    private ErrorResponseDTO buildBody(HttpStatus status, String message,
+                                        HttpServletRequest request, Map<String, String> fieldErrors) {
+        return ErrorResponseDTO.builder()
+                .timestamp(LocalDateTime.now())
+                .status(status.value())
+                .error(status.getReasonPhrase())
+                .message(message)
+                .path(request.getRequestURI())
+                .fieldErrors(fieldErrors)
+                .build();
+package com.placement.management.repository;
+
+import com.placement.management.model.PlacementStatus;
+import com.placement.management.model.Student;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface StudentRepository extends JpaRepository<Student, Long> {
+
+    Optional<Student> findByRegisterNumber(String registerNumber);
+    Optional<Student> findByEmail(String email);
+    boolean existsByRegisterNumber(String registerNumber);
+    boolean existsByEmail(String email);
+    long countByPlacementStatus(PlacementStatus placementStatus);
+
+    @Query("SELECT COUNT(DISTINCT s.department) FROM Student s")
+    long countDistinctDepartments();
+
+    @Query("SELECT AVG(s.cgpa) FROM Student s")
+    Double findAverageCgpa();
+
+    List<Student> findByNameContainingIgnoreCase(String name);
+    List<Student> findByRegisterNumberContainingIgnoreCase(String registerNumber);
+    List<Student> findByDepartmentContainingIgnoreCase(String department);
+
+    @Query("SELECT s FROM Student s WHERE " +
+           "LOWER(s.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+           "LOWER(s.registerNumber) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+           "LOWER(s.department) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+    List<Student> searchByKeyword(@Param("keyword") String keyword);
+}
+package com.placement.management.service;
+
+import com.placement.management.dto.DashboardStatsDTO;
+import com.placement.management.exception.DuplicateResourceException;
+import com.placement.management.exception.ResourceNotFoundException;
+import com.placement.management.model.PlacementStatus;
+import com.placement.management.model.Student;
+import com.placement.management.repository.StudentRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class StudentServiceImpl implements StudentService {
+
+    private final StudentRepository studentRepository;
+
+    @Override
+    public Student createStudent(Student student) {
+        if (studentRepository.existsByRegisterNumber(student.getRegisterNumber())) {
+            throw new DuplicateResourceException(
+                    "A student with register number '" + student.getRegisterNumber() + "' already exists");
+        }
+        if (studentRepository.existsByEmail(student.getEmail())) {
+            throw new DuplicateResourceException(
+                    "A student with email '" + student.getEmail() + "' already exists");
+        }
+        if (student.getPlacementStatus() == null) {
+            student.setPlacementStatus(PlacementStatus.NOT_PLACED);
+        }
+        return studentRepository.save(student);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Student> getAllStudents() {
+        return studentRepository.findAll();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Student getStudentById(Long id) {
+        return studentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
+    }
+
+    @Override
+    public Student updateStudent(Long id, Student updatedStudent) {
+        Student existing = studentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
+
+        studentRepository.findByRegisterNumber(updatedStudent.getRegisterNumber())
+                .filter(other -> !other.getId().equals(id))
+                .ifPresent(other -> {
+                    throw new DuplicateResourceException(
+                            "A student with register number '" + updatedStudent.getRegisterNumber() + "' already exists");
+                });
+
+        studentRepository.findByEmail(updatedStudent.getEmail())
+                .filter(other -> !other.getId().equals(id))
+                .ifPresent(other -> {
+                    throw new DuplicateResourceException(
+                            "A student with email '" + updatedStudent.getEmail() + "' already exists");
+                });
+
+        existing.setName(updatedStudent.getName());
+        existing.setRegisterNumber(updatedStudent.getRegisterNumber());
+        existing.setDepartment(updatedStudent.getDepartment());
+        existing.setEmail(updatedStudent.getEmail());
+        existing.setPhone(updatedStudent.getPhone());
+        existing.setCgpa(updatedStudent.getCgpa());
+        existing.setPlacementStatus(
+                updatedStudent.getPlacementStatus() != null
+                        ? updatedStudent.getPlacementStatus()
+                        : existing.getPlacementStatus());
+        existing.setCompanyName(updatedStudent.getCompanyName());
+
+        return studentRepository.save(existing);
+    }
+
+    @Override
+    public void deleteStudent(Long id) {
+        if (!studentRepository.existsById(id)) {
+            throw new ResourceNotFoundException("Student not found with id: " + id);
+        }
+        studentRepository.deleteById(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Student> searchStudents(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return studentRepository.findAll();
+        }
+        return studentRepository.searchByKeyword(keyword.trim());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DashboardStatsDTO getDashboardStats() {
+        long total = studentRepository.count();
+        long placed = studentRepository.countByPlacementStatus(PlacementStatus.PLACED);
+        long notPlaced = studentRepository.countByPlacementStatus(PlacementStatus.NOT_PLACED);
+        Double avgCgpa = studentRepository.findAverageCgpa();
+        long departmentCount = studentRepository.countDistinctDepartments();
+
+        return DashboardStatsDTO.builder()
+                .totalStudents(total)
+                .placedStudents(placed)
+                .notPlacedStudents(notPlaced)
+                .averageCgpa(avgCgpa != null ? Math.round(avgCgpa * 100.0) / 100.0 : 0.0)
+                .departmentCount(departmentCount)
+                .build();
+    }
+}
+package com.placement.management.controller;
+
+import com.placement.management.dto.DashboardStatsDTO;
+import com.placement.management.model.Student;
+import com.placement.management.service.StudentService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/students")
+@RequiredArgsConstructor
+public class StudentController {
+
+    private final StudentService studentService;
+
+    @PostMapping
+    public ResponseEntity<Student> createStudent(@Valid @RequestBody Student student) {
+        Student created = studentService.createStudent(student);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<Student>> getAllStudents() {
+        return ResponseEntity.ok(studentService.getAllStudents());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Student> getStudentById(@PathVariable Long id) {
+        return ResponseEntity.ok(studentService.getStudentById(id));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Student> updateStudent(
+            @PathVariable Long id, @Valid @RequestBody Student student) {
+        return ResponseEntity.ok(studentService.updateStudent(id, student));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteStudent(@PathVariable Long id) {
+        studentService.deleteStudent(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<Student>> searchStudents(@RequestParam(required = false) String keyword) {
+        return ResponseEntity.ok(studentService.searchStudents(keyword));
+    }
+
+    @GetMapping("/dashboard")
+    public ResponseEntity<DashboardStatsDTO> getDashboardStats() {
+        return ResponseEntity.ok(studentService.getDashboardStats());
+    }
+}
+package com.placement.management.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class CorsConfig implements WebMvcConfigurer {
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/**")
+                .allowedOriginPatterns("*")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("*")
+                .maxAge(3600);
+    }
+}
+spring.application.name=placement-management-system
+server.port=${PORT:8080}
+spring.datasource.url=jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:placement_db}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+spring.datasource.username=${DB_USERNAME:root}
+spring.datasource.password=${DB_PASSWORD:}
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+spring.jpa.hibernate.ddl-auto=${DDL_AUTO:update}
+spring.jpa.show-sql=${SHOW_SQL:false}
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+spring.jpa.open-in-view=false
+spring.jackson.default-property-inclusion=NON_NULL
+server.error.include-message=always
+server.error.include-binding-errors=always
+management.endpoints.web.exposure.include=health,info
+
+CREATE DATABASE IF NOT EXISTS placement_db
+    CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+USE placement_db;
+
+CREATE TABLE IF NOT EXISTS students (
+    id                BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name              VARCHAR(100)  NOT NULL,
+    register_number   VARCHAR(30)   NOT NULL,
+    department        VARCHAR(60)   NOT NULL,
+    email             VARCHAR(100)  NOT NULL,
+    phone             VARCHAR(15),
+    cgpa              DOUBLE        NOT NULL,
+    placement_status  VARCHAR(20)   NOT NULL,
+    company_name      VARCHAR(100),
+    created_at        DATETIME,
+    updated_at        DATETIME,
+    CONSTRAINT uk_students_register_number UNIQUE (register_number),
+    CONSTRAINT uk_students_email UNIQUE (email),
+    CONSTRAINT chk_students_cgpa CHECK (cgpa >= 0 AND cgpa <= 10),
+    CONSTRAINT chk_students_status CHECK (placement_status IN ('PLACED', 'NOT_PLACED'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+    }
+}
