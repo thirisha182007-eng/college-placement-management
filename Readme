@@ -1,0 +1,174 @@
+Here's the complete README.md:
+Markdown
+┌────────────────────┐        HTTP/JSON        ┌──────────────────────────┐
+│   Browser (SPA)     │  <──────────────────>  │   Spring Boot REST API   │
+│ index.html/css/js   │      /api/students      │  Controller → Service    │
+└────────────────────┘                          │   → Repository (JPA)     │
+└────────────┬─────────────┘
+│ JDBC
+▼
+┌───────────────────────┐
+│   MySQL: placement_db │
+│     students table    │
+└───────────────────────┘
+Code
+placement-management-system/
+├── pom.xml
+├── .gitignore
+├── README.md
+├── database/
+│   └── schema.sql
+├── postman/
+│   └── Placement_Management_API.postman_collection.json
+└── src/
+├── main/
+│   ├── java/com/placement/management/
+│   │   ├── PlacementManagementApplication.java
+│   │   ├── controller/
+│   │   │   └── StudentController.java
+│   │   ├── service/
+│   │   │   ├── StudentService.java
+│   │   │   └── StudentServiceImpl.java
+│   │   ├── repository/
+│   │   │   └── StudentRepository.java
+│   │   ├── model/
+│   │   │   ├── Student.java
+│   │   │   └── PlacementStatus.java
+│   │   ├── dto/
+│   │   │   ├── DashboardStatsDTO.java
+│   │   │   └── ErrorResponseDTO.java
+│   │   ├── exception/
+│   │   │   ├── ResourceNotFoundException.java
+│   │   │   ├── DuplicateResourceException.java
+│   │   │   └── GlobalExceptionHandler.java
+│   │   └── config/
+│   │       └── CorsConfig.java
+│   └── resources/
+│       ├── application.properties
+│       └── static/
+│           ├── index.html
+│           ├── css/style.css
+│           └── js/app.js
+└── test/
+├── java/com/placement/management/
+│   └── PlacementManagementApplicationTests.java
+└── resources/
+└── application-test.properties
+Code
+┌───────────────────────────┐
+│          Student           │
+├───────────────────────────┤
+│ id            PK           │
+│ name                       │
+│ register_number   UNIQUE   │
+│ department                 │
+│ email             UNIQUE   │
+│ phone                      │
+│ cgpa                       │
+│ placement_status           │
+│ company_name               │
+│ created_at                 │
+│ updated_at                 │
+└───────────────────────────┘
+Code
+Response 201 Created:
+Json
+Example: Error response (uniform shape for every error)
+Json
+10. CRUD Explanation
+Create — StudentController.createStudent validates the request body (@Valid), and StudentServiceImpl.createStudent checks for duplicate register numbers/emails before saving via StudentRepository.save.
+Read — getAllStudents returns the full register; getStudentById throws ResourceNotFoundException (→ 404) if the ID doesn't exist.
+Update — updateStudent loads the existing record, re-validates uniqueness against other students (so a student can keep their own register number/email), then applies field-by-field changes and saves.
+Delete — deleteStudent checks existence first so a clean 404 is returned instead of a silent no-op.
+11. Validation
+Frontend (js/app.js, validateForm): checks required fields, email format, phone format, and CGPA range before any network call, and displays inline error messages under each field.
+Backend (Jakarta Bean Validation on the Student entity + GlobalExceptionHandler): re-validates everything server-side regardless of what the client sent, since frontend validation alone can always be bypassed.
+Rule
+Enforced
+Name required
+Frontend + backend (@NotBlank)
+Register number required
+Frontend + backend (@NotBlank)
+Department required
+Frontend + backend (@NotBlank)
+Valid email format
+Frontend + backend (@Email)
+CGPA between 0–10
+Frontend + backend (@DecimalMin/@DecimalMax)
+Duplicate register number rejected
+Backend service check + DB unique constraint
+Duplicate email rejected
+Backend service check + DB unique constraint
+12. Testing
+Postman
+The full collection is in postman/Placement_Management_API.postman_collection.json. Import it into Postman, set the baseUrl variable (default http://localhost:8080), and run it as a collection. It covers:
+Create with valid data
+Create with missing fields
+Create with invalid email
+Create with duplicate register number
+Get all students
+Get student by ID
+Get invalid ID
+Update student
+Update invalid ID
+Delete student
+Delete invalid ID
+Search students
+Dashboard statistics
+Automated tests
+mvn test runs a Spring context-load smoke test against an in-memory H2 database, so tests never touch your real MySQL data.
+Frontend
+Verified manually in Chrome DevTools device toolbar at both a desktop width (1440px) and a mobile width (375px). Below 860px the sidebar collapses into a horizontal top navigation bar and the two-column form becomes a single column.
+13. Installation & Running Locally
+Prerequisites
+JDK 17+
+Maven 3.8+
+MySQL 8+ running locally (or accessible remotely)
+Steps
+Bash
+The application starts on http://localhost:8080.
+14. Environment Variables
+Variable
+Purpose
+Local default
+DB_HOST
+MySQL host
+localhost
+DB_PORT
+MySQL port
+3306
+DB_NAME
+Database name
+placement_db
+DB_USERNAME
+MySQL username
+root
+DB_PASSWORD
+MySQL password
+(empty)
+PORT
+HTTP port the app listens on
+8080
+DDL_AUTO
+Hibernate schema strategy
+update
+SHOW_SQL
+Log generated SQL
+false
+15. Cloud Deployment
+Push the repository to GitHub.
+Provision a MySQL database on your chosen provider.
+Create a new "Web Service" from the GitHub repo.
+Build command: mvn clean package -DskipTests
+Start command: java -jar target/placement-management-system.jar
+Set the environment variables from section 14 in the platform's dashboard.
+Deploy. Hibernate creates the students table automatically on first boot.
+16. Future Enhancements
+Authentication/authorization (placement-officer login)
+Pagination and column sorting for the student register
+CSV/Excel export of the register
+A Placement history table to track multiple drives/offers per student
+Email notifications to students when their placement status changes
+License / Academic Use
+Built as a demonstration project for a college CRUD web application SOP and viva. Free to adapt for coursework.
+Code
